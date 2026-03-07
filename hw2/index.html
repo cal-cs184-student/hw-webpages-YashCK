@@ -14,6 +14,7 @@
 
 			figure {
 				text-align: center;
+				margin: 1.5em 0;
 			}
 
 			img {
@@ -23,94 +24,308 @@
 			body {
 				font-family: 'Inter', sans-serif;
 			}
+
+			code {
+				background-color: #f4f4f4;
+				padding: 2px 6px;
+				border-radius: 3px;
+				font-size: 0.95em;
+			}
+
+			pre {
+				background-color: #f4f4f4;
+				padding: 12px 16px;
+				border-radius: 5px;
+				overflow-x: auto;
+				font-size: 0.9em;
+				line-height: 1.5;
+			}
+
+			.screenshot-placeholder {
+				border: 2px dashed #aaa;
+				background-color: #fafafa;
+				padding: 30px 20px;
+				margin: 1em 0;
+				text-align: center;
+				color: #666;
+				font-style: italic;
+			}
 		</style>
 	</head>
 	<body>
 		<div class="container">
-		<h1>CS184/284A Spring 2025 Homework 2 Write-Up</h1>
-		<div style="text-align: center;">Names: </div>
+		<h1>CS184/284A Spring 2026 Homework 2: MeshEdit Write-Up</h1>
+		<div style="text-align: center;">Names: Yash Kodali and Roshan Parekh</div>
 
 		<br>
 
-		Link to webpage: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
+		Link to webpage:  <a href="https://github.com/cal-cs184-student/hw-webpages-roshanparekh/blob/main/hw2/index.html">https://github.com/cal-cs184-student/hw-webpages-roshanparekh/blob/main/hw2/index.html</a>
 
 		<br>
-		
-		Link to GitHub repository: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
 
-		<figure>
-			<img src="teapot.png" alt="Teapot" style="width:50%"/>
-			<figcaption>You can add images with captions!</figcaption>
-		</figure>
-
-		<!--
-		We've already added one heading per part, to make your write-up as navigable when grading. Please fit your write-up within these sections!
-		-->
+		Link to GitHub repository: <a href="https://github.com/cal-cs184-student/hw2-meshedit-meshman">https://github.com/cal-cs184-student/hw2-meshedit-meshman</a>
+		<!-- ============================== OVERVIEW ============================== -->
 
 		<h2>Overview</h2>
-		Give a high-level overview of what you implemented in this homework. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the homework.
+		<p>
+			In this homework we explored geometric modeling. The big picture goal was to understand how smooth curves and surfaces 
+			are represented and evaluated on a computer. This is a problem that comes up often from font rendering to 3D modeling. 
+			For Section I specifically, we implemented de Casteljau's algorithm, which is the recursive method for evaluating Bezier curves and surfaces.
+		</p>
+
+		<!-- ======================== SECTION I ======================== -->
 
 		<h2>Section I: Bezier Curves and Surfaces</h2>
 
-		<h3>Part 1: Bezier curves with 1D de Casteljau subdivision</h3>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<!-- ==================== PART 1 ==================== -->
 
-		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is a column in that row. You might find this useful for framing and showing your result images in an organized fashion.</p>
+		<h3>Part 1: Bezier Curves with 1D de Casteljau Subdivision</h3>
+
+		<h4>What is de Casteljau's Algorithm?</h4>
+		<p>
+			A Bezier curve is a smooth parametric curve defined by a set of control points. The curve doesn't
+			necessarily pass through every control point but instead, the control points act like a skeleton that
+			influences the shape of the curve. The parameter \( t \in [0,1] \) tells us <em>where</em> along the curve
+			we want to evaluate: at \( t = 0 \) we get the first control point, at \( t = 1 \) we get the last, and
+			we get a smoothly interpolated point somewhere along the curve for the values in between.
+		</p>
+		<p>
+			De Casteljau's algorithm is used to actually compute that point for a given \( t \). We take every consecutive 
+			pair of control points and linearly interpolate between them at \( t \). If we started with \( n \) points, this 
+			gives us \( n - 1 \) intermediate points. Then we repeat the same process on those intermediate points by interpolating
+			consecutive pairs agai. This gives us \( n - 2 \) points. We keep going like this, until we end up with a single point. 
+			That single point lies exactly on the Bezier curve at parameter \( t \).
+		</p>
+		<p>
+			Given points \( p_1, p_2, \dots, p_n \), we produce
+			\( n - 1 \) new points:
+
+			\[
+			p_i' = (1 - t)\, p_i + t\, p_{i+1}, \quad i = 1, \dots, n-1
+			\]
+		</p>
+		<p>
+			This is just a weighted average between each pair of neighbors. When \( t = 0 \), each new point
+			equals the left neighbor; when \( t = 1 \), each new point equals the right neighbor; and for \( t \) in
+			between we get something in the middle. This gradually converges toward the final curve point.
+		</p>
+
+		<h4>How We Implemented It</h4>
+		<p>
+			Our implementation has a function that performs one level of this subdivision.
+			We loop over consecutive pairs, lerp them, and collect the results. The parameter \( t \) is stored as a member 
+			variable on the curve object, so we can just read it directly. We only do one step per call, so the caller has to call
+			the function multiple times until one point remains.
+		</p>
+
+		<h4>Custom Bezier Curve</h4>
+		<p>
+			We created a Bezier curve with 6 control points in <code>bzc/curve3.bzc</code>.
+			We picked points that zigzag up and down to form an S-like shape.
+		</p>
+
+		<h4>Evaluation Steps</h4>
+		<p>
+			Below you can see each level of de Casteljau evaluation on our 6-point curve. Level 0 shows the
+			original control points connected by white line segments. Each subsequent level shows the blue
+			intermediate points produced by one round of interpolation, with the number of points decreasing
+			by one at each step. At Level 5 we are left with a single red point which is the point on the Bezier curve
+			at the current \( t \) value.
+		</p>
+
 		<div style="display: flex; flex-direction: column; align-items: center;">
 			<table style="width: 100%; text-align: center; border-collapse: collapse;">
 			  <tr>
-				<td style="text-align: center;">
-				  <img src="teapot.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_curve3_base.png" width="400px" alt="Level 0 - Original control points"/>
+				  <figcaption>Level 0 &mdash; Original 6 control points</figcaption>
 				</td>
-				<td style="text-align: center;">
-				  <img src="teapot.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_curve3_1epress.png" width="400px" alt="Level 1 - First subdivision step"/>
+				  <figcaption>Level 1 &mdash; First subdivision step (E &times;1)</figcaption>
 				</td>
 			  </tr>
 			  <tr>
-				<td style="text-align: center;">
-				  <img src="teapot.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_curve3_2epress.png" width="400px" alt="Level 2 - Second subdivision step"/>
+				  <figcaption>Level 2 &mdash; Second subdivision step (E &times;2)</figcaption>
 				</td>
-				<td style="text-align: center;">
-				  <img src="teapot.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_curve3_3epress.png" width="400px" alt="Level 3 - Third subdivision step"/>
+				  <figcaption>Level 3 &mdash; Third subdivision step (E &times;3)</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_curve3_4epress.png" width="400px" alt="Level 4 - Fourth subdivision step"/>
+				  <figcaption>Level 4 &mdash; Fourth subdivision step (E &times;4)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_curve3_5epress.png" width="400px" alt="Level 5 - Final evaluated point"/>
+				  <figcaption>Level 5 &mdash; Final evaluated point (E &times;5)</figcaption>
 				</td>
 			  </tr>
 			</table>
 		</div>
 
-		<h3>Part 2: Bezier surfaces with separable 1D de Casteljau</h3>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<figure>
+			<img src="part1_curve3_cpress.png" width="500px" alt="Completed Bezier curve"/>
+			<figcaption>The completed Bezier curve drawn by evaluating over all values of \( t \) (toggled with C).</figcaption>
+		</figure>
+
+		<h4>Modified Curve</h4>
+		<p>
+			Below we moved a few control points to new positions, giving us a differently shaped curve. 
+			We also scrolled to vary the \\( t \\) parameter and show a few screenshots of how the intermediate levels
+			shift accordingly.
+		</p>
+
+		<figure>
+			<img src="part1_modcurve_base.png" width="500px" alt="Modified curve - base control points"/>
+			<figcaption>Modified control point positions (before stepping through evaluation).</figcaption>
+		</figure>
+
+		<p>
+			Here are screenshots at different values of \( t \), showing how the intermediate points and
+			final evaluated point move along the curve as we scroll:
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_modcurve_tparam1.png" width="400px" alt="Modified curve - t value 1"/>
+				  <figcaption>Varying \( t \) &mdash; position 1</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_modcurve_tparam2.png" width="400px" alt="Modified curve - t value 2"/>
+				  <figcaption>Varying \( t \) &mdash; position 2</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_modcurve_tparam3.png" width="400px" alt="Modified curve - t value 3"/>
+				  <figcaption>Varying \( t \) &mdash; position 3</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_modcurve_tparam4.png" width="400px" alt="Modified curve - t value 4"/>
+				  <figcaption>Varying \( t \) &mdash; position 4</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part1_modcurve_tparam5.png" width="400px" alt="Modified curve - t value 5"/>
+				  <figcaption>Varying \( t \) &mdash; position 5</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<figure>
+			<img src="part1_modcurve_cpress.png" width="500px" alt="Modified curve - completed Bezier curve"/>
+			<figcaption>The full Bezier curve for the modified control points (toggled with C).</figcaption>
+		</figure>
+
+		<!-- ==================== PART 2 ==================== -->
+
+		<h3>Part 2: Bezier Surfaces with Separable 1D de Casteljau</h3>
+
+		<h4>Extending to Surfaces</h4>
+		<p>
+			Bezier surfaces are the 2D generalization of Bezier curves. Instead of a 1D list of control
+			points, we now have an \( n \times n \) grid of 3D control points. Additionally, instead of a single
+			parameter \( t \) we have two parameters: \( u \) and \( v \), which both range between 0 to 1. The
+			pair \( (u, v) \) picks out a specific point on the surface.
+		</p>
+		<p>
+			We can reuse
+			the exact same 1D de Casteljau evaluation from Part 1, just applied in a two-pass method.
+		</p>
+		<ol>
+			<li>
+				<b>Evaluate each row at \( u \):</b> Each row of the control point grid defines its
+				own Bezier curve in 3D. We run the full de Casteljau algorithm on each row using parameter \( u \).
+				This collapses each row of \( n \) points down to a single 3D point. With \( n \) rows,
+				we end up with \( n \) points.
+			</li>
+			<li>
+				<b>Evaluate the column at \( v \):</b> Those \( n \) row-evaluated points sit roughly along a
+				column of the surface. They themselves define a Bezier curve, but time parameterized by \( v \).
+				We run de Casteljau one more time on these points using parameter \( v \), and the result is the
+				final surface point \( P(u, v) \).
+			</li>
+		</ol>
+		<p>
+			In total we're doing \( n + 1 \) independent 1D evaluations: \( n \) for the rows and 1 for the
+			column.
+		</p>
+
+		<h4>How We Implemented It</h4>
+		<p>
+			We have three functions that build on each other:
+		</p>
+		<ul>
+			<li>
+				<b>evaluateStep(points, t)</b> : This is essentially the same as the 2D version from Part 1,
+				except it works on 3D points and takes \( t \) as an explicit parameter. It performs a single
+				level of lerping between consecutive points.
+			</li>
+			<li>
+				<b>evaluate1D(points, t)</b> : This runs the full de Casteljau recursion to completion. It
+				just calls <em>evaluateStep</em> in a loop until only one point is left, then returns that point.
+			</li>
+			<li>
+				<b>evaluate(u, v)</b> : It iterates over each row of the control point grid, calls <em>evaluate1D</em> 
+				on each row with parameter \( u \) to get one point per row, collects those into a new list, and then calls 
+				<em>evaluate1D</em> on that list with parameter \( v \).
+			</li>
+		</ul>
+		<p>
+			In pseudocode:
+		</p>
+<pre>
+function evaluate(u, v):
+    column_points = empty list
+    for each row in controlPoints:
+        point = evaluate1D(row, u)
+        column_points.append(point)
+    return evaluate1D(column_points, v)
+</pre>
+
+		<h4>Result</h4>
+		<p>
+			To verify our implementation, we loaded the teapot defined as Bezier patches in <code>bez/teapot.bez</code>.
+			The mesh renderer samples the surface at a grid of \( (u, v) \) values, calls our <em>evaluate</em>
+			function for each sample, and stitches the resulting 3D points into triangles. The resulting teapot
+			is shown below.
+		</p>
+
+		<figure>
+			<img src="part2_teapot.png" width="500px" alt="Teapot from Bezier patches"/>
+			<figcaption>The teapot (<code>bez/teapot.bez</code>).</figcaption>
+		</figure>
+
+		<!-- ======================== SECTION II (placeholder) ======================== -->
 
 		<h2>Section II: Triangle Meshes and Half-Edge Data Structure</h2>
 
 		<h3>Part 3: Area-weighted vertex normals</h3>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<p><em>(To be completed.)</em></p>
 
 		<h3>Part 4: Edge flip</h3>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<p><em>(To be completed.)</em></p>
 
 		<h3>Part 5: Edge split</h3>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<p><em>(To be completed.)</em></p>
 
 		<h3>Part 6: Loop subdivision for mesh upsampling</h3>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<p><em>(To be completed.)</em></p>
 
-		<h2>(Optional) Section III: Potential Extra Credit - Art Competition: Model something Creative</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<!-- ======================== SECTION III (placeholder) ======================== -->
 
-		<h2>Additional Notes (please remove)</h2>
-		<ul>
-			<li>You can also add code if you'd like as so: <code>code code code</code></li>
-			<li>If you'd like to add math equations, 
-				<ul>
-					<li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
-					<li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
-				</ul>
-			</li>
-		</ul>
+		<h2>(Optional) Section III: Potential Extra Credit - Art Competition</h2>
+		<p><em>(To be completed.)</em></p>
+
 		</div>
 	</body>
 </html>
