@@ -307,22 +307,417 @@ function evaluate(u, v):
 
 		<h2>Section II: Triangle Meshes and Half-Edge Data Structure</h2>
 
-		<h3>Part 3: Area-weighted vertex normals</h3>
-		<p><em>(To be completed.)</em></p>
+		<!-- ==================== PART 3 ==================== -->
 
-		<h3>Part 4: Edge flip</h3>
-		<p><em>(To be completed.)</em></p>
+		<h3>Part 3: Area-Weighted Vertex Normals</h3>
 
-		<h3>Part 5: Edge split</h3>
-		<p><em>(To be completed.)</em></p>
+		<h4>Area-Weighted Normals</h4>
+		<p>
+			We compute a smooth normal at each vertex, and then interpolate those normals across each face. We can get
+			the geometric normal of each face from the cross product of two of its edges. We want a single normal at the vertex that
+			represents a smooth average of those face normals. We use area-weighted averaging so that each face's normal is weighted
+			by the triangle's area.
+		</p>
 
-		<h3>Part 6: Loop subdivision for mesh upsampling</h3>
-		<p><em>(To be completed.)</em></p>
+		<h4>How We Implemented It</h4>
+		<p>
+			We iterate over all faces incident to the vertex using the half-edge
+			traversal pattern. Starting from the vertex's halfedge, we follow
+			twin &rarr; next to walk around to the next outgoing halfedge. For each non-boundary face,
+			we grab the three vertex positions, compute the cross product, and accumulate it into a running
+			sum. At the end we normalize the accumulated vector to unit length.
+		</p>
+<pre>
+function vertex_normal():
+    n = (0, 0, 0)
+    h = this.halfedge
+    do:
+        if h.face is not boundary:
+            p0, p1, p2 = the three vertex positions of h.face
+            n += cross(p1 - p0, p2 - p0)     // area-weighted normal
+        h = h.twin.next                      // advance to the next face
+    while h != this.halfedge
+    return normalize(n)
+</pre>
+
+		<h4>Results</h4>
+		<p>
+			Below are screenshots of the teapot mesh (<code>dae/teapot.dae</code>) rendered with
+			flat shading (default) and with Phong shading (pressing Q to enable smooth vertex normals).
+			The difference is dramatic: the flat-shaded version looks faceted and polygonal, while the
+			Phong-shaded version shows a smooth, natural-looking teapot surface.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part3_flatshading.png" width="400px" alt="Teapot with flat shading"/>
+				  <figcaption>Flat shading (default)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part3_phongshading.png" width="400px" alt="Teapot with Phong shading"/>
+				  <figcaption>Phong shading with area-weighted vertex normals</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<!-- ==================== PART 4 ==================== -->
+
+		<h3>Part 4: Edge Flip</h3>
+
+		<h4>Edge Flip</h4>
+		<p>
+			Two triangles that share an edge from a diamond shape with four vertices. Flipping the shared edge means 
+			we reconnect the diagonal of that quad.
+		</p>
+		<p>
+			In terms of the half-edge data structure, we have to update the <code>next</code>,
+			<code>twin</code>, <code>vertex</code>, <code>edge</code>, and <code>face</code> pointers of the
+			six halfedges involved (three per triangle), plus the halfedge references stored on the vertices,
+			edges, and faces. No new elements are allocated as it's just a rewiring operation.
+		</p>
+
+		<h4>How We Implemented It</h4>
+		<p>
+			The approach we followed was to draw out the before and after configurations on paper, label every
+			element (halfedges, vertices, edges, faces), and then just write out the new pointer assignments
+			one by one. We used the <code>setNeighbors(next, twin, vertex, edge, face)</code> helper to set
+			all five fields of each halfedge in a single call.
+		</p>
+		<p>
+			In the before picture, we have triangles \( (a, b, c) \) and \( (c, b, d) \), with the shared
+			edge going between \( b \) and \( c \). In the after picture, we have triangles
+			\( (a, d, c) \) and \( (a, b, d) \), with the flipped edge going between \( a \) and \( d \).
+		</p>
+<pre>
+Before:                         After:
+    c                               c
+   / \                             /|\
+  /   \                           / | \
+ / f0  \                         /  |  \
+a-------b       ——>        a  f0 | f1  b
+ \ f1  /                         \  |  /
+  \   /                           \ | /
+   \ /                             \|/
+    d                               d
+
+Edge was b—c, now is a—d.
+</pre>
+		<p>
+			An important note is that we return immediately without doing anything if the edge is a boundary
+			edge, since flipping a boundary edge doesn't make geometric sense.
+		</p>
+
+		<h4>Debugging</h4>
+		<p>
+			The debugging process that helped us avoid bugs was to draw the "before" and "after"
+			diagrams, explicitly label all six halfedges (h0 through h5), all four vertices (a, b, c, d),
+			the two faces (f0, f1).By being thorough and not skipping any pointer, we were able to have a systematic way
+			of going about the code.
+		</p>
+
+		<h4>Results</h4>
+		<p>
+			Below are screenshots of a mesh before and after performing several edge flips. Each flip was done by clicking
+			an edge in the viewer and pressing F.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_select_edge.png" width="400px" alt="Selected edge before flip"/>
+				  <figcaption>Selected edge before flip</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_flip_edge.png" width="400px" alt="Edge after flip"/>
+				  <figcaption>After flipping the selected edge</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part4_several_edgeflips.png" width="500px" alt="After several edge flips"/>
+				  <figcaption>After several edge flips</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<!-- ==================== PART 5 ==================== -->
+
+		<h3>Part 5: Edge Split</h3>
+
+		<h4>Edge Split</h4>
+		<p>
+			Splitting an edge inserts a new vertex at the midpoint of that edge and reconnects the
+			mesh so that the two triangles sharing the edge become four triangles. The new vertex is connected
+			to the two opposing vertices which creates two new cross edges. Unlike a flip, a split actually creates 
+			new mesh elements: 1 new vertex, 3 new edges, 2 new faces, and 6 new halfedges. 
+		</p>
+
+		<h4>How We Implemented It</h4>
+		<p>
+			We followed a similar strategy to the edge flip: draw the before and after pictures, label
+			everything, and then write out all the pointer assignments.
+		</p>
+		<p>
+			Starting from two triangles \( (a, b, c) \) and \( (c, b, d) \) sharing edge \( b \text{--} c \),
+			we create midpoint \( m \) and end up with four triangles:
+		</p>
+<pre>
+Before:                            After:
+    c                                  c
+   / \                                /|\
+  /   \                              / | \
+ / f0  \                        f2 /   |  \ f3
+a-------b       ——>               a----m----b
+ \ f1  /                        f0 \   |  / f1
+  \   /                              \ | /
+   \ /                                \|/
+    d                                  d
+
+f0: (a, b, m)    f1: (b, d, m)
+f2: (a, m, c)    f3: (m, d, c)
+</pre>
+		<p>
+			We allocate the new elements (<code>newVertex</code>, <code>newEdge</code>, <code>newFace</code>,
+			<code>newHalfedge</code>), set the new vertex position to the midpoint of the original edge's
+			endpoints, and then carefully assign all of the halfedge pointers using <code>setNeighbors</code>.
+			Finally, we update the halfedge pointers on every vertex, face, and edge.
+		</p>
+		<p>
+			For loop subdivision (Part 6), we also set the <code>isNew</code> flags:
+			the new vertex \( m \) is marked new, the two cross edges \( m \text{--} a \) and \( m \text{--} d \)
+			are marked <code>isNew = true</code>, and the two edges along the original direction
+			(\( b \text{--} m \) and \( m \text{--} c \)) are marked <code>isNew = false</code>.
+		</p>
+
+		<h4>Debugging</h4>
+		<p>
+			Our approach was to write out all the face traversals (e.g., "f0: b &rarr; m &rarr; a &rarr; b corresponds to h0, h7, h2")
+			anf then filled in  <code>setNeighbors</code> from those traversals. We also double-checked every twin pairing
+			(h0/h3, h6/h7, h8/h9, hA/hB) and verified that each twin pair has opposite vertex assignments.
+		</p>
+
+		<h4>Results</h4>
+		<p>
+			Below are screenshots showing edge splits, as well as a combination of splits and flips.
+			Splits are performed by clicking an edge and pressing S, and flips by pressing F.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_base_teapot.png" width="400px" alt="Mesh before edge splits"/>
+				  <figcaption>Before edge splits</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_several_edgesplits.png" width="400px" alt="After several edge splits"/>
+				  <figcaption>After several edge splits</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part5_several_splits_flips.png" width="500px" alt="After splits and flips"/>
+				  <figcaption>After a combination of edge splits and flips</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<!-- ==================== PART 6 ==================== -->
+
+		<h3>Part 6: Loop Subdivision for Mesh Upsampling</h3>
+
+		<h4>What Is Loop Subdivision?</h4>
+		<p>
+			Loop subdivision is taking a coarse triangle mesh and producing a finer, smoother
+			mesh. The basic idea is: (1) split every edge to subdivide each triangle into four smaller
+			triangles, and (2) move all the vertices to smoothed positions so that the
+			mesh converges toward a smooth limit surface after repeated applications.
+		</p>
+
+		<h4>Vertex Position Update Rules</h4>
+		<p>
+			There are two kinds of vertices after subdivision: <b>old vertices</b> (the ones that already existed)
+			and <b>new vertices</b> (the ones created at edge midpoints during splitting). Each gets its position
+			from a different weighted average:
+		</p>
+
+		<p><b>New vertex position</b> (at the midpoint of edge \( A \text{--} B \), with opposing vertices \( C \) and \( D \)):</p>
+		\[
+			m = \frac{3}{8}(A + B) + \frac{1}{8}(C + D)
+		\]
+
+		<p><b>Old vertex position</b> (for a vertex with degree \( n \) and neighbors \( p_1, \dots, p_n \)):</p>
+		\[
+			v_{\text{new}} = (1 - n \cdot u) \cdot v_{\text{old}} + u \cdot \sum_{i=1}^{n} p_i
+		\]
+		<p>
+			where \( u = \frac{3}{16} \) if \( n = 3 \) and \( u = \frac{3}{8n} \) otherwise. A vertex moves partway
+			toward the average of its neighbors.
+		</p>
+
+		<h4>Our Implementation</h4>
+		<p>
+			We followed a 5-step approach:
+		</p>
+		<ol>
+			<li>
+				<b>Compute new positions for old vertices.</b> For each existing vertex we compute the weighted
+				average using the formula above and store it in <code>vertex.newPosition</code>. We also mark all
+				existing vertices with <code>isNew = false</code>.
+			</li>
+			<li>
+				<b>Compute new positions for edge midpoints.</b> For each existing edge we compute the
+				\( \frac{3}{8}(A+B) + \frac{1}{8}(C+D) \) weighted position and store it in
+				<code>edge.newPosition</code>. We also mark all existing edges with <code>isNew = false</code>.
+			</li>
+			<li>
+				<b>Split every original edge.</b> We iterate only over the original edges (using a counter
+				to avoid touching newly created ones). Splitting an edge creates a new vertex at the midpoint.
+				We immediately copy the precomputed <code>edge.newPosition</code> into the new vertex's
+				<code>newPosition</code>.
+			</li>
+			<li>
+				<b>Flip new edges connecting old and new vertices.</b> After splitting, the mesh has some diagonal
+				edges that run from an old vertex to a new vertex. These need to be flipped to complete the 4-1
+				subdivision pattern properly. We iterate over all edges, and for any edge that is marked
+				<code>isNew</code> and connects one old vertex to one new vertex, we flip it.
+			</li>
+			<li>
+				<b>Copy new positions into final positions.</b> Finally we do a single loop over all vertices
+				and set <code>position = newPosition</code>.
+			</li>
+		</ol>
+<pre>
+function upsample(mesh):
+    // Step 1: compute smoothed positions for old vertices
+    for each vertex v in mesh:
+        v.isNew = false
+        n = v.degree
+        u = 3/16 if n == 3 else 3/(8n)
+        v.newPosition = (1 - n*u) * v.position + u * sum_of_neighbors
+
+    // Step 2: compute positions for new edge midpoints
+    for each edge e in mesh:
+        e.isNew = false
+        A, B = edge endpoints
+        C, D = opposing vertices of the two adjacent faces
+        e.newPosition = 3/8 * (A + B) + 1/8 * (C + D)
+
+    // Step 3: split original edges only
+    numOriginalEdges = mesh.nEdges
+    for each original edge e (up to numOriginalEdges):
+        m = mesh.splitEdge(e)
+        m.newPosition = e.newPosition
+        m.isNew = true
+
+    // Step 4: flip new edges connecting old vertex to new vertex
+    for each edge e in mesh:
+        if e.isNew and (one endpoint is new, other is old):
+            mesh.flipEdge(e)
+
+    // Step 5: update all vertex positions
+    for each vertex v in mesh:
+        v.position = v.newPosition
+</pre>
+
+		<h4>Observations: Sharp Corners and Edges</h4>
+		<p>
+			After repeatedly applying loop subdivision, sharp corners and edges get rounded off. This happens
+			because the position update rules pull each vertex toward the average of its neighbors, which has
+			a smoothing/blurring effect. Vertices sitting at sharp features get pulled away from their original
+			positions and toward the surrounding geometry, causing the corners to become increasingly rounded
+			with each iteration.
+		</p>
+		<p>
+			One way to reduce this effect is to pre-split edges near the sharp features. This increases
+			the local vertex density, which means each vertex has neighbors that are more tightly clustered around
+			the original sharp position. With more neighbors close together, the averaging doesn't move the corner
+			vertex as far, so the sharpness is better preserved.
+		</p>
+
+		<h4>Cube Asymmetry Analysis</h4>
+		<p>
+			Loading <code>dae/cube.dae</code> and performing loop subdivision shows
+			the cube becomes slightly asymmetric after a few iterations. It should remain perfectly symmetric, but it doesn't.
+		</p>
+		<p>
+			The reason is because the original cube mesh has each face split into two triangles by a single diagonal
+			edge, and the diagonals are not placed symmetrically. For example, one face might have its diagonal
+			going from the top-left to bottom-right, and another face has it in a different orientation. This
+			asymmetric triangulation breaks the symmetry of the vertex connectivity, so the Loop subdivision 
+			weights produce slightly different results on different parts of the cube.
+		</p>
+		<p>
+			To fix this, we can pre-process the cube by splitting each diagonal edge before subdivision,
+			which adds a vertex at the center of each face and turns the two triangles into four symmetric ones.
+			After this, every face of the cube has a uniform triangulation pattern and the vertex valences
+			become symmetric. Now repeated Loop subdivision produces a perfectly symmetric rounded shape.
+		</p>
+
+		<h4>Results</h4>
+		<p>
+			Below are screenshots showing the cube and teapot (or other mesh) at various levels of loop subdivision.
+			Press L to perform one level of subdivision.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_base_cube.png" width="400px" alt="Cube before subdivision"/>
+				  <figcaption>Cube &mdash; Level 0 (original)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_cube_1l.png" width="400px" alt="Cube after 1 subdivision"/>
+				  <figcaption>Cube &mdash; Level 1</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_cube_2l.png" width="400px" alt="Cube after 2 subdivisions"/>
+				  <figcaption>Cube &mdash; Level 2</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_cube_3l.png" width="400px" alt="Cube after 3 subdivisions"/>
+				  <figcaption>Cube &mdash; Level 3 (note asymmetry)</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part6_cube_4l.png" width="500px" alt="Cube after 4 subdivisions"/>
+				  <figcaption>Cube &mdash; Level 4</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_preprocess_cube.png" width="400px" alt="Pre-processed cube"/>
+				  <figcaption>Pre-processed cube (symmetric triangulation)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_preprocess_multil.png" width="400px" alt="Pre-processed cube after subdivision"/>
+				  <figcaption>Pre-processed cube &mdash; after loop subdivision (symmetric)</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_base_teapot.png" width="400px" alt="Teapot before subdivision"/>
+				  <figcaption>Teapot &mdash; before loop subdivision</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_teapot_1l.png" width="400px" alt="Teapot after 1 subdivision"/>
+				  <figcaption>Teapot &mdash; after 1 level of loop subdivision</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
 
 		<!-- ======================== SECTION III (placeholder) ======================== -->
-
-		<h2>(Optional) Section III: Potential Extra Credit - Art Competition</h2>
-		<p><em>(To be completed.)</em></p>
 
 		</div>
 	</body>
