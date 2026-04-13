@@ -262,7 +262,7 @@
 			</table>
 		</div>
 
-		<h4>Shaded Cloth at Rest &mdash; <code>pinned4.json</code></h4>
+		<h4>Shaded Cloth at Rest : <code>pinned4.json</code></h4>
 		<p>
 			Below is a screenshot of the shaded cloth from <code>scene/pinned4.json</code> in its final resting state, using default parameters
 			(<code>ks</code> = 5000 N/m, density = 15 g/cm&sup2;, damping = 0.2%).
@@ -371,7 +371,119 @@
 		</figure>
 
 		<h2>Part 4: Handling self-collisions</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h4>Implementation Overview</h4>
+		<p>
+			Without self-collision handling, the cloth clips through itself when it folds. To fix this efficiently , we use <b>spatial hashing</b>. 
+			At each timestep we build a hash table that maps 3D box volumes to the point masses they contain, then only check collisions between nearby point masses sharing the same box.
+		</p>
+
+		<h4><code>hash_position</code></h4>
+		<p>
+			We partition 3D space into boxes of dimensions \( w \times h \times t \), where \( w = 3 \cdot \text{width} / \text{num_width_points}\),
+			\( h = 3 \cdot \text{height} / \text{num_height_points} \), and \( t = \max(w, h) \). For a given position, we truncate
+			each coordinate to its box index using <code>floor</code>, then combine the three indices into a unique float.
+		</p>
+
+		<h4><code>build_spatial_map</code></h4>
+		<p>
+			We clear the map, then loop over all point masses. For each one, we compute its hash and insert a pointer to it
+			into the corresponding bucket (creating a new <code>vector&lt;PointMass*&gt;</code> if the key doesn't exist yet).
+		</p>
+
+		<h4><code>self_collide</code></h4>
+		<p>
+			For a given point mass, we look up all candidate point masses in its hash bucket. For each candidate (other than itself),
+			if the distance is less than \( 2 \cdot \text{thickness} \), we compute a correction vector that would push the point mass
+			away so the pair is exactly \( 2 \cdot \text{thickness} \) apart. We average all such pairwise correction vectors and
+			scale down by <code>simulation_steps</code> before applying the correction to the point mass's position.
+		</p>
+		<p>
+			In <code>Cloth::simulate</code>, before handling collisions with other primitives, we call <code>build_spatial_map()</code>
+			and then <code>self_collide</code> on every point mass.
+		</p>
+
+		<h4>Self-Collision Sequence</h4>
+		<p>
+			Here are screenshots showing the cloth falling and folding on itself over time, from the initial collision through
+			to a more restful state on the ground.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_self_early.png" width="300px" alt="Early self-collision"/>
+				  <figcaption>Early:cloth begins to fold on itself</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_self_mid.png" width="300px" alt="Mid self-collision"/>
+				  <figcaption>Middle: cloth continues folding into layers</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_self_rest.png" width="300px" alt="Rest state self-collision"/>
+				  <figcaption>Rest: cloth settled on the plane</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Varying <code>density</code></h4>
+		<p>
+			With a <b>low density</b> (e.g., 1 g/cm&sup2;), the cloth is very light, so gravitational forces are small relative to
+			the spring restoring forces. When the cloth falls on itself, it produces fewer, larger folds. The layers tend to be
+			smoother and more spread out because the cloth has less momentum and the springs can more easily maintain the cloth's
+			shape. The self-collision corrections are less aggressive since there is less compressive force pushing layers together.
+		</p>
+		<p>
+			With a <b>high density</b> (e.g., 50 g/cm&sup2;), the cloth is much heavier. It falls faster, hits the ground with more
+			force, and crumples into many small, tight folds. The layers compress together more aggressively, producing a denser and 
+			more wrinkled pile. The cloth's weight overwhelms the spring forces, leading to many more pronounced creases.
+		</p>
+
+		Both cloths eventually do flatten out but their self-collision process is different.
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_density_low.png" width="400px" alt="Self-collision low density"/>
+				  <figcaption>Low density = 1 g/cm&sup2; - fewer, smoother folds</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_density_high.png" width="400px" alt="Self-collision high density"/>
+				  <figcaption>High density = 50 g/cm&sup2; - many tight, crumpled folds</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Varying <code>ks</code></h4>
+		<p>
+			With a <b>low <code>ks</code></b> (e.g., 500 N/m), the springs are weak, so the cloth has very little internal resistance.
+			When it folds on itself, it collapses easily into many small, tight creases. The layers compress together and the cloth
+			looks very wrinkly and crumpled, similar to the effect of high density.
+		</p>
+		<p>
+			With a <b>high <code>ks</code></b> (e.g., 50000 N/m), the springs are very stiff. The cloth resists bending and folding,
+			so when it collides with itself it produces fewer, broader folds. The layers maintain more separation and the cloth
+			looks smoother, so its like a stiff sheet of paper that folds into large, gentle curves rather than crumpling.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_ks_low.png" width="400px" alt="Self-collision low ks"/>
+				  <figcaption>Low <code>ks</code> = 500 - many small creases</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part4_ks_high.png" width="400px" alt="Self-collision high ks"/>
+				  <figcaption>High <code>ks</code> = 50000 - fewer, broad folds</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
 
 		<h2>Part 5: Shaders</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
