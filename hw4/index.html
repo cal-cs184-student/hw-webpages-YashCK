@@ -284,7 +284,91 @@
 		</div>
 
 		<h2>Part 3: Handling collisions with other objects</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h4>Implementation Overview</h4>
+		<p>
+			In Part 3 we added collision handling so the cloth can interact with other objects in the scene. We implemented
+			collision responses for two primitive types (spheres and planes) and integrated them into the simulation loop.
+		</p>
+
+		<h4>Sphere Collisions</h4>
+		<p>
+			In <code>Sphere::collide</code>, for each point mass we check whether it is inside the sphere by computing the distance
+			from the point mass's current position to the sphere's origin. If this distance is less than or equal to the sphere's
+			radius, then the point mass has intersected. To do this
+		</p>
+		<ol>
+			<li>We compute the <b>tangent point</b> by extending the vector from the sphere's origin to the point mass's position
+				out to the sphere's surface.</li>
+			<li>We compute a <b>correction vector</b> from the point mass's <code>last_position</code> to the tangent point.</li>
+			<li>We set the point mass's new <code>position</code> to <code>last_position + correction * (1 - friction)</code>,
+				which accounts for friction by scaling down the correction.</li>
+		</ol>
+
+		<h4>Plane Collisions</h4>
+		<p>
+			In <code>Plane::collide</code>, we detect whether a point mass crossed the plane during this timestep by checking
+			whether the signed distances of the current position and last position to the plane have opposite signs.
+		</p>
+		<ol>
+			<li>We compute the <b>tangent point</b> by projecting the current position onto the plane along the normal.</li>
+			<li>We compute a <b>correction vector</b> from <code>last_position</code> to a point slightly above the tangent point.</li>
+			<li>We set the new <code>position</code> to <code>last_position + correction * (1 - friction)</code>.</li>
+		</ol>
+		<p>
+			In <code>Cloth::simulate</code>, after Verlet integration, we loop over every point mass and test collision against
+			every <code>CollisionObject</code> in the scene.
+		</p>
+
+		<h4>Cloth on Sphere: Varying <code>ks</code></h4>
+		<p>
+			Below are screenshots of the cloth draped over a sphere at rest for three different spring constant values.
+		</p>
+		<p>
+			With <b><code>ks</code> = 500</b> (low), the springs are very weak, so the cloth conforms tightly to the sphere's surface.
+			It drapes closely and wraps further around the sphere, producing many fine folds and a loose, flowing appearance.
+			The cloth hangs heavily below the sphere's equator.
+		</p>
+		<p>
+			With <b><code>ks</code> = 5000</b> (default), the cloth drapes naturally over the sphere with a moderate number of folds.
+			It covers the top portion of the sphere and hangs with a balance between stiffness and flexibility.
+		</p>
+		<p>
+			With <b><code>ks</code> = 50000</b> (high), the springs are very stiff, so the cloth does not conform closely to the sphere.
+			Instead, it sits more rigidly on top, with fewer folds and a more tent-like shape. The edges hang at wider angles and the
+			cloth resists bending around the sphere's curvature.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part3_sphere_ks500.png" width="400px" alt="Sphere collision ks=500"/>
+				  <figcaption><code>ks</code> = 500 -> cloth drapes tightly around sphere</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part3_sphere_ks5000.png" width="400px" alt="Sphere collision ks=5000"/>
+				  <figcaption><code>ks</code> = 5000 (default) -> natural drape</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part3_sphere_ks50000.png" width="400px" alt="Sphere collision ks=50000"/>
+				  <figcaption><code>ks</code> = 50000 -> stiff cloth, tent-like shape</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Cloth on Plane</h4>
+		<p>
+			Below is a screenshot of the cloth lying peacefully at rest on the plane.
+		</p>
+
+		<figure>
+			<img src="part3_plane_rest.png" width="600px" alt="Cloth resting on plane"/>
+			<figcaption>Cloth at rest on the plane (<code>scene/plane.json</code>, default parameters)</figcaption>
+		</figure>
 
 		<h2>Part 4: Handling self-collisions</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
