@@ -486,21 +486,256 @@
 		</div>
 
 		<h2>Part 5: Shaders</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
 
-		<h2>(Optional) Part 6: Extra Credit - Additional cloth simulation features!</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-		
-		<h2>Additional Notes (please remove)</h2>
+		<h4>What is a Shader Program?</h4>
+		<p>
+			A shader program is a small, isolated program that runs in parallel on the GPU. It processes parts of the graphics
+			pipeline to determine the final appearance of each pixel on screen. Shader programs are composed of at least two
+			stages that work together:
+		</p>
 		<ul>
-			<li>You can also add code if you'd like as so: <code>code code code</code></li>
-			<li>If you'd like to add math equations, 
-				<ul>
-					<li>You can write inline equations like so: \( a^2 + b^2 = c^2 \)</li>
-					<li>You can write display equations like so: \[ a^2 + b^2 = c^2 \]</li>
-				</ul>
-			</li>
+			<li><b>Vertex shaders</b> run once per vertex. They take in per-vertex attributes (position, normal, UV coordinates,
+				tangent) and apply transformations. These typically convert from model space to world space and then to screen space.
+				They write transformed values into varying outputs that get interpolated across the triangle's face via
+				barycentric coordinates before being passed to the fragment shader.</li>
+			<li><b>Fragment shaders</b> run once per fragment. They receive the interpolated varying values
+				from the vertex shader and use them to compute the final RGBA color for that pixel. Aspects like lighting
+				calculations, texture lookups, and material effects are computed in this stage.</li>
 		</ul>
+		<p>
+			The vertex shader positions geometry on screen while the fragment shader computes what color each visible
+			pixel should be. Both stages share access to "uniform" variables that remain the same across all
+			vertices/fragments in a single draw call.
+		</p>
+
+		<h4>Blinn-Phong Shading Model</h4>
+		<p>
+			The Blinn-Phong model computes the color of a surface point as the sum of three components:
+		</p>
+		<ul>
+			<li><b>Ambient:</b> \( L_a = k_a \cdot I_a \) A constant base illumination that approximates indirect light bouncing around
+				the scene. It make sure that no surface is completely black, even if it faces away from the light.</li>
+			<li><b>Diffuse:</b> \( L_d = k_d \cdot (I / r^2) \cdot \max(0, \mathbf{n} \cdot \mathbf{l}) \) — Light scattered equally in all
+				directions from the surface. The intensity depends on the angle between the surface normal \(\mathbf{n}\) and
+				the light direction \(\mathbf{l}\). Surfaces facing the light are brightest while those perpendicular are dark.</li>
+			<li><b>Specular:</b> \( L_s = k_s \cdot (I / r^2) \cdot \max(0, \mathbf{n} \cdot \mathbf{h})^p \) — This is the shiny highlight
+				seen on glossy surfaces. It uses the average of light and view directions \(\mathbf{h} = \text{normalize}(\mathbf{l} + \mathbf{v})\).
+				The exponent \(p\) controls how tight/focused the highlight is. Higher values give a smaller, sharper specular spot.</li>
+		</ul>
+		<p>
+			The total is \( L = L_a + L_d + L_s \). We used \( k_a = 0.1 \), \( k_d = 1.0 \), \( k_s = 0.5 \), \( p = 100 \).
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_phong_ambient.png" width="400px" alt="Phong ambient only"/>
+				  <figcaption>Ambient component only</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_phong_diffuse.png" width="400px" alt="Phong diffuse only"/>
+				  <figcaption>Diffuse component only</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_phong_specular.png" width="400px" alt="Phong specular only"/>
+				  <figcaption>Specular component only</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_phong_full.png" width="400px" alt="Phong full model"/>
+				  <figcaption>Full Blinn-Phong model (all three)</figcaption>
+				</td>
+			  </tr>
+			</table>
 		</div>
+
+		<h4>Texture Mapping</h4>
+		<p>
+			Our texture shader samples from a 2D texture using the interpolated UV coordinates. Below is a screenshot
+			using a custom texture that is paper-like.
+		</p>
+
+		<figure>
+			<img src="part5_texture_custom.png" width="600px" alt="Custom texture mapping"/>
+			<figcaption>Texture mapping with our custom texture on the cloth</figcaption>
+		</figure>
+
+		<h4>Bump Mapping vs Displacement Mapping</h4>
+		<p>
+			<b>Bump mapping</b> modifies the surface normals based on a height map texture without changing the actual geometry.
+			The fragment shader computes local derivatives of the height map (\(dU\) and \(dV\)) and uses the tangent-bitangent-normal
+			matrix to transform the local-space normal \( n_o = (-dU, -dV, 1) \) into model space. The lighting as a result appears bumpy,
+			but the silhouette remains smooth.
+		</p>
+		<p>
+			<b>Displacement mapping</b> goes a bit further as the vertex shader actually moves each vertex along its normal by the height
+			map value scaled by <code>u_height_scaling</code>. This changes the physical geometry, so bumps appear in the silhouette
+			and in shadows too. The fragment shader applies the same normal perturbation as bump mapping for consistent lighting.
+		</p>
+
+		Here we use the texture_4.png instead of the default texture_2.png.
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_bump_cloth.png" width="400px" alt="Bump mapping on cloth"/>
+				  <figcaption>Bump mapping on cloth</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_bump_sphere.png" width="400px" alt="Bump mapping on sphere"/>
+				  <figcaption>Bump mapping on sphere</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_displacement_cloth.png" width="400px" alt="Displacement mapping on cloth"/>
+				  <figcaption>Displacement mapping on cloth</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_displacement_sphere.png" width="400px" alt="Displacement mapping on sphere"/>
+				  <figcaption>Displacement mapping on sphere</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<p>
+			<b>Comparison:</b> Bump mapping seems cheaper and works well for small-scale surface detail as the cloth and sphere look
+			textured under lighting but their outlines remain smooth. Displacement mapping also produces convincing results for
+			large-scale bumps since the geometry itself changes: the sphere's silhouette becomes visibly bumpy. However, displacement
+			mapping requires enough mesh resolution to capture the height map details.
+		</p>
+
+		<h4>Bump vs. Displacement at Different Sphere Coarseness</h4>
+		<p>
+			Below we compare the two approaches on the sphere at low resolution (<code>-o 16 -a 16</code>) and high resolution
+			(<code>-o 128 -a 128</code>).
+		</p>
+		<p>
+			At <b>low resolution</b> (<code>-o 16 -a 16</code>), bump mapping still produces smooth-looking lighting perturbations
+			because it only modifies normals per-fragment. Displacement mapping at low resolution produces similar results on the sphere, 
+			but we can see jagged polygonal artifacts  on the cloth because there aren't enough vertices to faithfully represent the height map. The displacement
+			has to work with the few existing vertices, creating large flat facets. This makes the sphere look smoother.
+		</p>
+		<p>
+			At <b>high resolution</b> (<code>-o 128 -a 128</code>), bump mapping looks the same as before (it doesn't depend on
+			mesh resolution). Displacement mapping, has many more vertices available, so the displaced geometry more closely follows the height map
+			and produces smooth, detailed bumps that also appear in the silhouette.  There are some more bumps/ridges on the sphere though as it
+			tries to reporduce them from the texture.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_bump_16.png" width="400px" alt="Bump sphere -o 16 -a 16"/>
+				  <figcaption>Bump mapping <code>-o 16 -a 16</code></figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_bump_128.png" width="400px" alt="Bump sphere -o 128 -a 128"/>
+				  <figcaption>Bump mapping <code>-o 128 -a 128</code></figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_displacement_16.png" width="400px" alt="Displacement sphere -o 16 -a 16"/>
+				  <figcaption>Displacement mapping <code>-o 16 -a 16</code></figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_displacement_128.png" width="400px" alt="Displacement sphere -o 128 -a 128"/>
+				  <figcaption>Displacement mapping <code>-o 128 -a 128</code></figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Mirror Shader</h4>
+		<p>
+			The mirror shader computes the reflection of the outgoing eye-ray across the surface normal and samples the
+			environment cubemap in that reflected direction. This gives the cloth and sphere a reflective-like
+			appearance.
+		</p>
+
+		<!-- PLACEHOLDER IMAGES: How to generate mirror screenshots:
+			1. Run: ./clothsim -f ../scene/sphere.json
+			2. Select the "Mirror" shader from the dropdown.
+			3. Let the cloth settle on the sphere.
+			4. Take a screenshot showing the cloth -> save as "part5_mirror_cloth.png"
+			5. Rotate to show the sphere clearly -> save as "part5_mirror_sphere.png"
+		-->
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_mirror_cloth.png" width="400px" alt="Mirror shader on cloth"/>
+				  <figcaption>Mirror shader on cloth</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part5_mirror_sphere.png" width="400px" alt="Mirror shader on sphere"/>
+				  <figcaption>Mirror shader on sphere</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h2>Part 6: Extra Credit: Cel/Toon Shader</h2>
+
+		<h4>Custom Shader Description</h4>
+		<p>
+			For extra credit, we implemented a <b>cel/toon shader</b>, which a classic non-photorealistic rendering technique
+			commonly used in games and animation to give 3D objects a hand-drawn, cartoon-like appearance. Unlike the other
+			shaders in this assignment which aim for photorealism, the toon shader intentionally breaks the smooth gradients
+			of Phong lighting into flat, discrete color bands.
+		</p>
+		<p>
+			The shader has three components:
+		</p>
+		<ol>
+			<li><b>Quantized diffuse lighting:</b> Instead of using the continuous \( \max(0, \mathbf{n} \cdot \mathbf{l}) \)
+				value, we threshold it into 4 discrete intensity bands (bright at &gt; 0.6, mid at &gt; 0.2, shadow at &gt; &minus;0.1,
+				and deep shadow below). This creates the flat-shaded look of cartoon rendering, where surfaces
+				snap between distinct brightness levels rather than blending smoothly.</li>
+			<li><b>Hard specular cutoff:</b> The Blinn-Phong specular term \( \mathbf{n} \cdot \mathbf{h} \) is thresholded
+				at 0.95 — either fully on or fully off. This produces a clean, sharp highlight spot instead of a smooth falloff.
+				This mimics how highlights are drawn in cel animation as simple white shapes.</li>
+			<li><b>Rim/silhouette outline:</b> We detect edges by checking where \( \mathbf{n} \cdot \mathbf{v} < 0.15 \)
+				(the surface normal is nearly perpendicular to the view direction). These fragments are rendered black,
+				creating the bold ink-outline effect typical of cartoon and comic book art.</li>
+		</ol>
+		<p>
+			The result is a shader that makes the cloth and sphere look like they belong in a video game
+			or animated film. There are clear shadow boundaries, sharp highlights, and visible outlines along edges and folds.
+			The cloth folds are also well-suited for this style since each fold creates distinct light/shadow
+			transitions that the quantization makes very readable.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_toon_cloth.png" width="400px" alt="Toon shader on cloth over sphere"/>
+				  <figcaption>Cel/toon shader: cloth draped over sphere</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_toon_cloth2.png" width="400px" alt="Toon shader on cloth over sphere"/>
+				  <figcaption>Cel/toon shader: cloth draped over sphere (rotated)</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part6_toon_sphere.png" width="400px" alt="Toon shader on sphere"/>
+				  <figcaption>Cel/toon shader: sphere showing outline and bands</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part6_toon_pinned2.png" width="400px" alt="Toon shader on pinned2 cloth"/>
+				  <figcaption>Cel/toon shader on <code>pinned2.json</code>: folds show clear shadow bands</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+		
 	</body>
 </html>
