@@ -23,24 +23,40 @@
 			body {
 				font-family: 'Inter', sans-serif;
 			}
+
+			code {
+				background-color: #f4f4f4;
+				padding: 2px 6px;
+				border-radius: 3px;
+				font-size: 0.95em;
+			}
+
+			pre {
+				background-color: #f4f4f4;
+				padding: 12px 16px;
+				border-radius: 5px;
+				overflow-x: auto;
+				font-size: 0.9em;
+				line-height: 1.5;
+			}
 		</style>
 	</head>
 	<body>
 		<div class="container">
-		<h1>CS184/284A Spring 2025 Homework 4 Write-Up</h1>
-		<div style="text-align: center;">Names: </div>
+		<h1>CS184/284A Spring 2025 Homework 4: Cloth Simulation Write-Up</h1>
+		<div style="text-align: center;">Names: Yash Kodali and Roshan Parekh</div>
 
 		<br>
 
-		Link to webpage: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
+		Link to webpage: <a href="https://github.com/cal-cs184-student/hw-webpages-YashCK/blob/main/hw4/index.html">https://github.com/cal-cs184-student/hw-webpages-YashCK/blob/main/hw4/index.html</a>
 
 		<br>
 
-		Link to GitHub repository: (TODO) <a href="https://cs184.eecs.berkeley.edu/sp25">cs184.eecs.berkeley.edu/sp25</a>
+		Link to GitHub repository: <a href="https://github.com/cal-cs184-student/hw4-clothsim-fiberman-1">https://github.com/cal-cs184-student/hw4-clothsim-fiberman-1</a>
 
 		<figure>
 			<img src="clothsim.png" alt="Cloth draped over sphere" style="width:70%"/>
-			<figcaption>You can add images with captions!</figcaption>
+			<!-- <figcaption>You can add images with captions!</figcaption> -->
 		</figure>
 
 		<!--
@@ -48,36 +64,94 @@
 		-->
 
 		<h2>Overview</h2>
-		Give a high-level overview of what you implemented in this homework. Think about what you've built as a whole. Share your thoughts on what interesting things you've learned from completing the homework.
+		<p>
+			In this homework we implemented a real-time cloth simulation using a mass-spring system. We started by constructing a grid of
+			point masses connected by structural, shearing, and bending springs in Part 1. We then used Verlet integration to simulate the
+			physics of the cloth under external forces in Part 2. We also handled collisions with other objects like spheres and planes
+			(Part 3), self-collisions using spatial hashing (Part 4), and implemented various GLSL shaders for realistic rendering (Part 5).
+		</p>
 
-		<h2>Part 1: Masses and springs</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+		<h2>Part 1: Masses and Springs</h2>
 
-		<p>Here is an example 2x2 gridlike structure using an HTML table. Each <b>tr</b> is a row and each <b>td</b> is a column in that row. You might find this useful for framing and showing your result images in an organized fashion.</p>
+		<h4>Implementation Overview</h4>
+		<p>
+			To build the cloth, we created an evenly spaced grid of <code>num_width_points &times; num_height_points</code> point masses.
+			Each point mass is placed at a position determined by its grid index, linearly interpolated across the cloth's
+			<code>width</code> and <code>height</code>.
+		</p>
+		<p>
+			For a <b>horizontal</b> cloth, all point masses have their \( y \)-coordinate set to 1, and positions varied over the \( xz \)-plane.
+			For a <b>vertical</b> cloth, positions vary over the \( xy \)-plane, with a small random \( z \)-offset in the range
+			\([-1/1000,\; 1/1000]\) to break symmetry and allow the cloth to fold naturally when it falls.
+		</p>
+		<p>
+			After placing all point masses (in row-major / x-axis order), we connected them with three types of springs:
+		</p>
+		<ul>
+			<li><b>Structural</b> springs which connect each mass to its immediate left neighbor and the mass directly above it. 
+				These help maintain the grid shape of the cloth.</li>
+			<li><b>Shearing</b> springs connect each mass to its diagonal upper-left and diagonal upper-right neighbors.
+				These help resist in-plane shearing deformation.</li>
+			<li><b>Bending</b> springs connect each mass to the mass two positions to its left and two positions above.
+				These provide resistance to out-of-plane bending, and give the cloth stiffness.</li>
+		</ul>
+		<p>
+			We also made sure pinned \((x, y)\) values stay fixed during simulation.
+		</p>
+
+		<h4>Screenshots of <code>scene/pinned2.json</code></h4>
+		<p>
+			Below are screenshots of the cloth wireframe for <code>pinned2.json</code> that show
+			the structure of the point masses and springs.
+		</p>
+
 		<div style="display: flex; flex-direction: column; align-items: center;">
 			<table style="width: 100%; text-align: center; border-collapse: collapse;">
 			  <tr>
-				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_pinned2_angle1.png" width="400px" alt="pinned2 wireframe angle 1"/>
+				  <figcaption><code>pinned2.json</code> Viewing angle 1</figcaption>
 				</td>
-				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
-				</td>
-			  </tr>
-			  <tr>
-				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
-				</td>
-				<td style="text-align: center;">
-				  <img src="clothsim.png" width="400px"/>
-				  <figcaption>Caption goes here.</figcaption>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_pinned2_angle2.png" width="400px" alt="pinned2 wireframe angle 2"/>
+				  <figcaption><code>pinned2.json</code> Viewing angle 2</figcaption>
 				</td>
 			  </tr>
 			</table>
 		</div>
+
+		<h4>Wireframe with Different Spring Constraints</h4>
+		<p>
+			We toggling each type of spring constraint on and off. Here is the wireframe in those three configurations:
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_no_shearing.png" width="400px" alt="No shearing constraints"/>
+				  <figcaption>(1) Without any shearing constraints</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part1_only_shearing.png" width="400px" alt="Only shearing constraints"/>
+				  <figcaption>(2) With only shearing constraints</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;" colspan="2">
+				  <img src="part1_all_constraints.png" width="400px" alt="All constraints"/>
+				  <figcaption>(3) With all constraints (structural + shearing + bending)</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<p>
+			<b>Without shearing constraints (1):</b> Only horizontal/vertical (structural) and skip-one (bending) springs are visible,
+			forming a grid pattern with no diagonal lines.<br>
+			<b>Only shearing constraints (2):</b> Only diagonal springs are visible, which forms a X-pattern across each cell.<br>
+			<b>All constraints (3):</b> The full wireframe is visible with horizontal, vertical, and diagonal springs which creates the full mesh.
+		</p>
 
 		<h2>Part 2: Simulation via numerical integration</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
