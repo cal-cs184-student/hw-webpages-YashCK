@@ -154,7 +154,134 @@
 		</p>
 
 		<h2>Part 2: Simulation via numerical integration</h2>
-		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+		<h4>Implementation Overview</h4>
+		<p>
+			In Part 2 we implemented the physics simulation. Each timestep involves three steps:
+		</p>
+		<ol>
+			<li><b>Compute total forces:</b> Reset all point mass force accumulators and apply the uniform external
+				force to every point mass. Afterwards, for each enabled spring, we compute the spring correction force using Hooke's law.
+				We choose the reccomended \( k_s \) value of 0.2 to multiply by for beind springs to make them weaker.</li>
+			<li><b>Verlet integration:</b> We update each unpinned point mass's position using:
+				\[ x_{t+dt} = x_t + (1 - d)(x_t - x_{t-dt}) + a_t \cdot dt^2 \].</li>
+			<li><b>Constrain spring lengths:</b> We followed the Provost 1995 method where we correct the two endpoint positions so the 
+				spring is at 110%, if its length is greater.</li>
+		</ol>
+
+		Here is the default cloth for comparison (before changing any parameters):
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_ks_default.png" width="400px" alt="Low ks cloth"/>
+				  <figcaption>Default Cloth</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Effects of Changing Spring Constant <code>ks</code></h4>
+		<p>
+			With a <b>very low <code>ks</code></b> (50 N/m), the springs are very weak. The cloth stretches a lot under gravity, and droops
+			a lot between the pinner points. The top edge sags which causes the cloth's overall shape to be loose/floppy. Ripples and folds are also
+			more pronounced because there is little resistance to deformation.
+		</p>
+		<p>
+			With a <b>very high <code>ks</code></b> (50000 N/m), the springs are extremely stiff. The cloth barely stretches at all and
+			hangs rigidly between the pinned corners. The top edge remains quite close to straight (small drop only) and the cloth looks like a stiff board
+			overall. There are not many wrinkles because the springs strongly resist any change from their rest lengths.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_ks_low.png" width="400px" alt="Low ks cloth"/>
+				  <figcaption>Low <code>ks</code> = 50 N/m: cloth droops a lot</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_ks_high.png" width="400px" alt="High ks cloth"/>
+				  <figcaption>High <code>ks</code> = 50000 N/m: cloth hangs stiffly</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Effects of Changing <code>density</code></h4>
+		<p>
+			With a <b>low density</b> (1 g/cm&sup2;), the cloth is very light. Gravity has less pull on each point mass,
+			so the cloth doesn't sag much. It comes to rest pretty quickly and has only shallow curves. The effect is a bit similar to
+			increasing <code>ks</code>. The cloth appears stiffer because the gravitational force is small relative to the spring forces.
+		</p>
+		<p>
+			With a <b>high density</b> (100 g/cm&sup2;), the cloth is very heavy. It stretches and droops dramatically under its own weight,
+			pulling hard on the pinned points. The behavior is a bit similar to lowering <code>ks</code> because the gravitational force now overwhelms
+			the spring restoring forces. The cloth sags a lot and shows more wrinkles and folds.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_density_low.png" width="400px" alt="Low density cloth"/>
+				  <figcaption>Low density = 1 g/cm&sup2;: light cloth, little sag</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_density_high.png" width="400px" alt="High density cloth"/>
+				  <figcaption>High density = 100 g/cm&sup2;: heavy cloth, deep sag</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Effects of Changing <code>damping</code></h4>
+		<p>
+			With <b>low damping</b> (e.g., ~0%), very little energy is dissipated each timestep. The cloth swings back and forth
+			for a very long time before coming to rest. It oscillates a ton, almost like its a pendulum with with no friction/other resistance.
+			The cloth even folds over itself multiple times during the transient motion.
+		</p>
+		<p>
+			With <b>high damping</b> (e.g., ~1%), a large fraction of kinetic energy is removed each timestep. The cloth falls
+			very slowly and smoothly, as if its moving in slowmo. It reaches its rest state quickly without any
+			oscillation or overshoot. The motion is visually very smooth.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_damping_low.png" width="400px" alt="Low damping cloth"/>
+				  <figcaption>Low damping &asymp; 0%: cloth swings wildly</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_damping_high.png" width="400px" alt="High damping cloth"/>
+				  <figcaption>High damping &asymp; 1%: cloth falls slowly, no oscillation</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h4>Shaded Cloth at Rest &mdash; <code>pinned4.json</code></h4>
+		<p>
+			Below is a screenshot of the shaded cloth from <code>scene/pinned4.json</code> in its final resting state, using default parameters
+			(<code>ks</code> = 5000 N/m, density = 15 g/cm&sup2;, damping = 0.2%).
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_pinned4_rest.png" width="400px" alt="pinned4 shaded cloth at rest"/>
+				  <figcaption><code>pinned4.json</code> Shaded cloth at rest (default parameters)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="part2_pinned4_rest_wireframe.png" width="400px" alt="pinned4 shaded cloth at rest"/>
+				  <figcaption><code>pinned4.json</code> Shaded cloth at rest (default parameters) but Wireframe version</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
 
 		<h2>Part 3: Handling collisions with other objects</h2>
 		Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
