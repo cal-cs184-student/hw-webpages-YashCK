@@ -681,11 +681,19 @@
 			</table>
 		</div>
 
-		<h2>Part 6: Extra Credit: Cel/Toon Shader</h2>
+		<h2>Part 6: Extra Credit</h2>
+
+		<p>
+			We implemented five extra credit features for this project: a <b>cel/toon custom shader</b> (Part 5),
+			<b>spatially varying wind forces</b>, an <b>AABB bounding volume hierarchy for self-collisions</b>,
+			<b>interactive GUI object movement</b>, and a <b>box/cube collision primitive</b>.
+		</p>
+
+		<h3>Extra Credit 1: Cel/Toon Custom Shader</h3>
 
 		<h4>Custom Shader Description</h4>
 		<p>
-			For extra credit, we implemented a <b>cel/toon shader</b>, which a classic non-photorealistic rendering technique
+			We implemented a <b>cel/toon shader</b>, which is a classic non-photorealistic rendering technique
 			commonly used in games and animation to give 3D objects a hand-drawn, cartoon-like appearance. Unlike the other
 			shaders in this assignment which aim for photorealism, the toon shader intentionally breaks the smooth gradients
 			of Phong lighting into flat, discrete color bands.
@@ -732,6 +740,329 @@
 				<td style="text-align: center; padding: 10px;" colspan="2">
 				  <img src="part6_toon_pinned2.png" width="400px" alt="Toon shader on pinned2 cloth"/>
 				  <figcaption>Cel/toon shader on <code>pinned2.json</code>: folds show clear shadow bands</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Extra Credit 2: Spatially Varying Wind</h3>
+
+		<h4>Theory</h4>
+		<p>
+			Wind is modeled as an <b>aerodynamic drag force</b> that acts on the cloth surface. Unlike gravity
+			(which is uniform), wind should produce different forces depending on:
+		</p>
+		<ol>
+			<li><b>Surface orientation:</b> A surface facing the wind receives full force, while one parallel to
+				it receives none. This is captured by the dot product \( \mathbf{v}_{\text{wind}} \cdot \mathbf{n} \).</li>
+			<li><b>Spatial variation:</b> Real wind has gusts so the force varies across the cloth surface.</li>
+			<li><b>Temporal variation:</b> Gusts change over time, creating dynamic motion.</li>
+		</ol>
+		<p>
+			We use the following aerodynamic force model for each point mass:
+		</p>
+		<p>
+			$$\mathbf{F}_{\text{wind}} = m \cdot (\mathbf{a}_{\text{wind}} \cdot \hat{\mathbf{n}}) \cdot \hat{\mathbf{n}}$$
+		</p>
+		<p>
+			where \( \mathbf{a}_{\text{wind}} = \hat{\mathbf{d}} \cdot s \cdot g(x,z,t) \) is the wind acceleration
+			vector (direction \( \hat{\mathbf{d}} \), strength \( s \)), modulated by a gust function:
+		</p>
+		<p>
+			$$g(x,z,t) = 0.7 + 0.3 \sin(3x + 2t) \cos(2z + 1.5t)$$
+		</p>
+		<p>
+			This sinusoidal gust function creates wind patterns that sweep across the cloth
+			surface over time, which produces billowing and fluttering behavior.
+		</p>
+
+		<h4>Implementation</h4>
+		<p>
+			We added wind parameters (<code>enable_wind</code>, <code>wind_strength</code>,
+			<code>wind_direction</code>) to <code>ClothParameters</code> and GUI toggle/sliders in
+			the Simulation panel. In <code>Cloth::simulate()</code>, after computing external forces,
+			we iterate over all point masses and add the aerodynamic wind force using each point mass's
+			surface normal (from the halfedge mesh). Simulation time is tracked with a counter that
+			increments each timestep to drive the temporal variation.
+		</p>
+		<p>
+			We chose this approach over a simple uniform force because:
+			(1) the normal-dependent force correctly models how flat surfaces catch wind while edges slice through it,
+			and (2) the sinusoidal spatial variation creates organic-looking motion without requiring a full
+			simulation.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_wind_pinned2.png" width="400px" alt="Wind blowing cloth in +X"/>
+				  <figcaption>Wind enabled (strength=20, dir=(1,0,0)): cloth blown sideways on <code>pinned2.json</code></figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_wind_pinned2_z.png" width="400px" alt="Wind blowing cloth in +Z"/>
+				  <figcaption>Wind direction changed to (0,0,1): cloth blown in Z direction</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_wind_sphere_nowind.png" width="400px" alt="Sphere without wind"/>
+				  <figcaption>Cloth on sphere — no wind (baseline)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_wind_sphere.png" width="400px" alt="Sphere with wind"/>
+				  <figcaption>Cloth on sphere — wind pushes fabric off to one side</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Extra Credit 3: AABB Hierarchy for Self-Collisions</h3>
+
+		<h4>Theory</h4>
+		<p>
+			The baseline self-collision implementation uses <b>spatial hashing</b>. That approach discretizes 3D space into
+			a grid of boxes and hashing point masses into buckets. This is efficient on average, but has  a couple of weaknesses:
+			the box size is chosen heuristically (3x the inter-point spacing), and performance degrades when the
+			cloth folds in ways that don't align with the grid.
+		</p>
+		<p>
+			For the extra credit we implemented an alternative: an <b>Axis-Aligned Bounding Box (AABB) Bounding Volume Hierarchy (BVH)</b>.
+			This is a binary tree where:
+		</p>
+		<ul>
+			<li>Each <b>leaf node</b> stores a small set of point masses (<= 8) and their tight AABB.</li>
+			<li>Each <b>internal node</b> stores the AABB that encloses both children.</li>
+			<li>The tree is built by recursively <b>partitioning along the longest axis at the median</b>
+				(using <code>std::nth_element</code> for O(n) partitioning).</li>
+		</ul>
+		<p>
+			For self-collision queries, we search for all point masses within a radius of
+			\( 2 \times \text{thickness} \) by traversing the BVH. At each internal node, we test
+			whether the search sphere intersects the node's AABB:
+		</p>
+		<p>
+			$$d^2 = \sum_{i \in \{x,y,z\}} \max(0,\; \text{min}_i - c_i)^2 + \max(0,\; c_i - \text{max}_i)^2$$
+		</p>
+		<p>
+			If \( d^2 > r^2 \), the entire subtree is pruned. This gives <b>O(n log n)</b> build time and
+			<b>O(log n)</b> average query time per point mass.
+		</p>
+
+		<h4>Implementation</h4>
+		<p>
+			We added <code>AABB</code> and <code>BVHNode</code> structs to <code>cloth.h</code>.
+			The BVH is stored as a flat <code>vector&lt;BVHNode&gt;</code> (node pool) with integer indices
+			for left/right children. This helps avoid any pointer overhead and improves cache locality. A separate
+			<code>vector&lt;PointMass*&gt;</code> stores the point masses in BVH-sorted order, with each leaf
+			referencing a contiguous range.
+		</p>
+		<p>
+			The BVH is rebuilt each simulation step (like the spatial hash map) since the cloth moves.
+			A "Use BVH" toggle in the GUI allows live switching between spatial hashing and BVH
+			for comparison.
+		</p>
+		<p>
+			We chose BVH over other acceleration structures (k-d trees, octrees) because:
+			(1) AABBs are easy to compute and intersect, (2) the flat pool representation avoids
+			dynamic allocation, and (3) median-split construction guarantees a balanced tree depth
+			of O(log n), making worst-case query time predictable.
+		</p>
+
+		Overall both methods show a realistic folding and self-collision approach, however the AABB and BVH method
+		does run a bit slower with our implementation.
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_bvh_hash.png" width="400px" alt="Self-collision with spatial hashing"/>
+				  <figcaption>Self-collision with spatial hashing (default)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_bvh_bvh.png" width="400px" alt="Self-collision with BVH"/>
+				  <figcaption>Self-collision with AABB BVH — identical behavior</figcaption>
+				</td>
+			  </tr>
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_bvh_hash_late.png" width="400px" alt="Late fold with spatial hashing"/>
+				  <figcaption>Later fold state (spatial hashing)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_bvh_bvh_late.png" width="400px" alt="Late fold with BVH"/>
+				  <figcaption>Later fold state (BVH) — similar behavior</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Extra Credit 4: Interactive Object Movement</h3>
+
+		<h4>Theory</h4>
+		<p>
+			To allow interactive experimentation, we added the ability to move collision objects
+			(spheres, planes, boxes) in the scene using keyboard controls. This enables real-time
+			exploration of how cloth interacts with objects at different positions. For example,
+			pushing a sphere through draped cloth or sliding a plane to catch falling fabric.
+		</p>
+
+		<h4>Implementation</h4>
+		<p>
+			We added a virtual <code>translate(Vector3D offset)</code> method to the
+			<code>CollisionObject</code> base class, overridden by each subclass:
+		</p>
+		<ul>
+			<li><b>Sphere:</b> translates <code>origin</code></li>
+			<li><b>Plane:</b> translates <code>point</code></li>
+			<li><b>Box:</b> translates <code>center</code></li>
+		</ul>
+		<p>
+			The keyboard controls are:
+		</p>
+		<ul>
+			<li><b>Tab:</b> Cycle through collision objects (prints selection to console)</li>
+			<li><b>Arrow keys:</b> Move selected object on the XZ plane</li>
+			<li><b>[ and ]:</b> Move selected object down/up on the Y axis</li>
+		</ul>
+		<p>
+			Each keypress translates the object by 0.02 units, which is about 2% of the default cloth width.
+			Movement works whether the simulation is paused or running, which allows us to precisely position
+			objects or watch the cloth respond in real time as objects move beneath it.
+		</p>
+		<p>
+			We went this approach as it seemed simple and robust. We are able to reuse the existing
+			collision detection without any changes to the physics, since <code>collide()</code> already reads the object's
+			current position each frame. We chose keyboard-based translation over mouse picking because
+			the mouse is already used for camera control, and keyboard control gives precise
+			axis-aligned movement.
+		</p>
+
+		<figure>
+			<img src="ec_move_initial.png" width="400px" alt="Initial Postition"/>
+			<figcaption>Initial: cloth settled on sphere at default position</figcaption>
+		</figure>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_right_initial.png" width="300px" alt="Initial position"/>
+				  <figcaption>>After moving sphere right — cloth drapes off-center [Initial Setup]</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_right_end.png" width="300px" alt="Sphere moved right"/>
+				  <figcaption>After moving sphere right — cloth drapes off-center [Result]</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_up_intial.png" width="300px" alt="Sphere moved up"/>
+				  <figcaption>Sphere moved up - cloth is lifted and bounces [Initial Setup]</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_up_middle.png" width="300px" alt="Sphere moved up"/>
+				  <figcaption>Sphere moved up — cloth is lifted and bounces [Middle Animation]</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_up_end.png" width="300px" alt="Sphere moved up"/>
+				  <figcaption>Sphere moved up — cloth is lifted and bounces [Result]</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_displaced_initial.png" width="300px" alt="Sphere fully displaced"/>
+				  <figcaption>Sphere moved to another new position [Initial Setup]</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_move_displaced_end.png" width="300px" alt="Sphere fully displaced"/>
+				  <figcaption>Sphere moved to another new position [Result]</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<h3>Extra Credit 5: Box Collision Primitive</h3>
+
+		<h4>Theory</h4>
+		<p>
+			The original simulation supports only spheres and planes. We added an <b>axis-aligned rectangular prism
+			(box)</b> as a new 3D collision primitive, defined by its center and half-extents along each axis.
+		</p>
+		<p>
+			The collision algorithm works by a <b>minimum-penetration-depth</b> approach:
+		</p>
+		<ol>
+			<li><b>Inside test:</b> A point mass is inside the box if
+				\( |p_i - c_i| < h_i \) for all axes \( i \in \{x, y, z\} \),
+				where \( c \) is the box center and \( h \) is the half-extents.</li>
+			<li><b>Nearest face:</b> Compute the penetration depth on each axis:
+				\( d_i = h_i - |p_i - c_i| \). The axis with minimum \( d_i \) gives
+				the shortest escape direction (the closest face).</li>
+			<li><b>Projection:</b> Move the point mass to the surface of that face, plus a
+				small <code>SURFACE_OFFSET</code> (0.0001) to prevent re-intersection.</li>
+			<li><b>Friction:</b> Apply the same friction-scaled correction as sphere/plane:
+				\( \mathbf{p}_{\text{new}} = \mathbf{p}_{\text{last}} +
+				(\mathbf{p}_{\text{tangent}} - \mathbf{p}_{\text{last}}) \cdot (1 - f) \).</li>
+		</ol>
+
+		<h4>Implementation</h4>
+		<p>
+			We created <code>collision/box.h</code> and <code>collision/box.cpp</code> as a new
+			<code>CollisionObject</code> subclass. The <code>collide()</code> method implements the
+			algorithm above. The <code>render()</code> method draws the box as 6 faces (12 triangles, 36
+			vertices) with properly wound normals for correct lighting.
+		</p>
+		<p>
+			We also extended the JSON scene loader in <code>main.cpp</code> to parse <code>"box"</code>
+			objects with <code>"center"</code>, <code>"half_extents"</code>, and <code>"friction"</code>
+			fields. A test scene <code>scene/box.json</code> demonstrates cloth falling onto a box.
+		</p>
+		<p>
+			The minimum-penetration approach was chosen over ray-casting because it's simpler, handles
+			points that start inside the box, and produces the correct escape direction. The friction
+			model is consistent with the sphere and plane implementations for uniform cloth behavior across all primitives.
+		</p>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_box_falling_initial.png" width="400px" alt="Cloth falling onto box"/>
+				  <figcaption>Cloth before falling (from <code>box.json</code> scene)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_box_falling.png" width="400px" alt="Cloth falling onto box"/>
+				  <figcaption>Cloth mid-fall onto the box (from <code>box.json</code> scene)</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_box_settled.png" width="400px" alt="Cloth settled on box"/>
+				  <figcaption>Cloth fully settled — drapes over box edges</figcaption>
+				</td>
+			  </tr>
+			</table>
+		</div>
+
+		<div style="display: flex; flex-direction: column; align-items: center;">
+			<table style="width: 100%; text-align: center; border-collapse: collapse;">
+			  <tr>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_box_underneath.png" width="400px" alt="Box side view"/>
+				  <figcaption>Underneath view — shows how cloth drapes from the downside</figcaption>
+				</td>
+				<td style="text-align: center; padding: 10px;">
+				  <img src="ec_box_drape.png" width="400px" alt="Box drape detail"/>
+				  <figcaption>Cloth draping over box corners and edges</figcaption>
 				</td>
 			  </tr>
 			</table>
